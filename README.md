@@ -23,7 +23,7 @@ This is a dynamic and interactive graphing tool built for visualizing evolving m
    - Supported variables: `x`, `y`, `t`.
    - Supported functions: `sin`, `cos`, `tan`, `sqrt`, `log`, `exp`, `abs`, `floor`, `ceil`, `round`, `min`, `max`, `pow`.
    - Constants: `pi`, `e`.
-   - Operators: `+`, `-`, `/`, `**` (exponentiation).
+   - Operators: `+`, `-`, `*`, `/`, `**` (exponentiation).
    
 2. **Change Color Modes**:
    - Click the color palette icon and select a mode (Grayscale or Rainbow).
