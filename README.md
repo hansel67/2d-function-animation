@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a dynamic and interactive graphing tool built for visualizing evolving mathematical functions in a 2D space. It provides a canvas where users can input equations to generate animations and experiment with different color modes and styles.
+Graphing tool for visualizing evolving mathematical functions in 2D space. Input equations to generate animations.
 
 ## Features
 
