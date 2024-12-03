@@ -1,4 +1,4 @@
-# 2D Function Animation
+# 2D Function Animation [[Try it!](https://hansel67.github.io/2d-function-animation/)]
 
 ## Overview
 
