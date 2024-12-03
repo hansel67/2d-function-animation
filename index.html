@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Grapher</title>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Proxima Nova', sans-serif;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+  }
+
+  .control-panel {
+    position: absolute;
+    top: 12.5%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 10;
+  }
+
+  textarea#modeInput {
+    width: 80%;
+    max-width: 500px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 10px;
+    resize: none;
+  }
+
+  .button-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .button {
+    background-color: rgba(255, 255, 255, 0.8);
+    border: none;
+    cursor: pointer;
+    border-radius: 20px;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 10px;
+  }
+
+  .dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.8);
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 11;
+    border-radius: 5px;
+    padding: 5px 0;
+    top: 60px;
+  }
+
+  .dropdown-content a {
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    text-align: center;
+  }
+
+  .dropdown-content a:hover {background-color: #ddd;}
+
+  .dropdown {
+    position: relative;
+    display: inline-block;
+  }
+
+  .info-panel, .copy-message, .history-panel {
+    display: none;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 10px;
+    margin-top: 10px;
+    text-align: left;
+  }
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+  <canvas id="myCanvas"></canvas>
+  <div class="control-panel">
+    <textarea id="modeInput" rows="1">x/y+t</textarea>
+    <div class="button-container">
+      <button id="downloadButton" class="button"><i class="fas fa-download"></i></button>
+      <button id="copyButton" class="button"><i class="fas fa-copy"></i></button>
+      <div class="dropdown">
+        <button id="paintButton" class="button"><i class="fas fa-palette"></i></button>
+        <div id="colorOptions" class="dropdown-content">
+          <a href="#" onclick="changeColorMode('GRAY')">Gray</a>
+          <a href="#" onclick="changeColorMode('RAINBOW')">Rainbow</a>
+        </div>
+      </div>
+      <button id="infoButton" class="button"><i class="fas fa-info-circle"></i></button>
+      <button id="historyButton" class="button"><i class="fas fa-history"></i></button>
+    </div>
+    <div id="infoPanel" class="info-panel">
+      Variables: x, y, t<br>
+      Functions: sin, cos, tan, sqrt, log, exp, abs, floor, ceil, round, min, max, pow<br>
+      Constants: pi, e<br>
+      Operators: +, -, /, **
+    </div>
+    <div id="copyMessage" class="copy-message">Text copied to clipboard!</div>
+    <div id="historyPanel" class="history-panel"></div>
+  </div>
+
+
+  <script>
+    const canvas = document.getElementById("myCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // State variables
+    let t = 0;
+    let animationFrameId = null;
+    let transformationFunc = null; // Current transformation function
+    let lastValidTransformation = null; // Backup of the last valid function
+    let history = []; // Array to store history of valid formulas
+    const loopDuration = 1.5;
+    const timeStep = 0.01;
+    let colorMode = 'GRAY';
+    const frameRate = 30; //For download
+    const duration = 5; 
+
+    // Set canvas size
+    function setCanvasDimensions() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    }
+    setCanvasDimensions();
+    window.addEventListener("resize", setCanvasDimensions);
+
+    // Function to sanitize input and create transformation function
+    function sanitizeInput(input) {
+    const allowedFunctions = ['sin', 'cos', 'tan', 'sqrt', 'log', 'exp', 'abs', 'floor', 'min', 'max'];
+    const allowedConstants = ['pi', 'e'];
+
+    // Match allowed functions explicitly and ensure they're followed by '('
+    const sanitized = input.replace(/[^xytsincoasqrtlgepabsfloceilroundminaxpowPIE\d\.\+\-\*\/\(\)\s]/g, '');
+
+    // Ensure functions are followed by '('
+    const functionPattern = new RegExp(`\\b(${allowedFunctions.join('|')})\\b(?!\\()`, 'g');
+    if (functionPattern.test(sanitized)) {
+        throw new Error("Invalid syntax: Function without parentheses detected.");
+    }
+
+    // Replace allowed functions with Math equivalents
+    const replacedFunctions = sanitized.replace(new RegExp(`\\b(${allowedFunctions.join('|')})\\b`, 'g'), 'Math.$1');
+
+    // Replace allowed constants with Math equivalents
+    const replacedConstants = replacedFunctions.replace(new RegExp(`\\b(${allowedConstants.join('|')})\\b`, 'g'), 'Math.$1');
+
+    return replacedConstants;
+    }
+
+    // Compile the formula and handle errors
+    function handleInputChange() {
+    const mode = document.getElementById("modeInput").value.trim();
+
+    try {
+        const sanitizedMode = sanitizeInput(mode);
+
+        const newTransformationFunc = new Function('x', 'y', 't', `return ${sanitizedMode};`);
+        newTransformationFunc(0, 1, 0); // Validate the function
+
+        transformationFunc = newTransformationFunc;
+        lastValidTransformation = transformationFunc; // Backup
+
+        // Add the valid formula to history
+        if (!history.includes(mode)) {
+        history.push(mode);
+        }
+
+        reinitializeCanvas();
+    } catch (error) {
+        console.error("Invalid formula. Continuing with the last valid animation:", error.message);
+        transformationFunc = lastValidTransformation; // Revert to the last valid
+    }
+    }
+
+    // Cancel current animation, clear canvas, and restart
+    function reinitializeCanvas() {
+    if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    t = 0;
+    drawImage(); // Start new animation
+    }
+
+    // Calculate color value based on function output
+    function getColorValue(f, offset = 0) {
+    return 255 * (Math.sin(2 * Math.PI * f + offset) + 1) / 2;
+    }
+
+    // Draw pixels onto the canvas
+    function processPixels(imageData, xStart, xEnd, yStart, yEnd, xStep, yStep, t) {
+    let index = 0;
+    switch (colorMode) {
+        case 'RAINBOW':
+        for (let y = yStart; y < yEnd; y += yStep) {
+            for (let x = xStart; x < xEnd; x += xStep) {
+            const f = transformationFunc(x, y, t);
+            imageData.data[index++] = getColorValue(f);
+            imageData.data[index++] = getColorValue(f, 2 * Math.PI / 3);
+            imageData.data[index++] = getColorValue(f, 4 * Math.PI / 3);
+            imageData.data[index++] = 255;
+            }
+        }
+        break;
+        default:
+        for (let y = yStart; y < yEnd; y += yStep) {
+            for (let x = xStart; x < xEnd; x += xStep) {
+            const f = transformationFunc(x, y, t);
+            const color = getColorValue(f);
+            imageData.data[index++] = color;
+            imageData.data[index++] = color;
+            imageData.data[index++] = color;
+            imageData.data[index++] = 255;
+            }
+        } // Gray scale
+    }
+    ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Main animation loop
+    function drawImage() {
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const ratio = canvasWidth / canvasHeight;
+
+    const xStart = -ratio;
+    const xEnd = ratio;
+    const yEnd = 1;
+    const yStart = -1;
+
+    const xStep = (xEnd - xStart) / (canvasWidth - 0.5);
+    const yStep = (yEnd - yStart) / canvasHeight;
+
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    processPixels(imageData, xStart, xEnd, yStart, yEnd, xStep, yStep, t);
+
+    t += timeStep / loopDuration;
+    if (t > 1) t = 0;
+
+    animationFrameId = requestAnimationFrame(drawImage);
+    }
+
+    // Function to change color mode from dropdown
+    function changeColorMode(mode) {
+    colorMode = mode;
+    reinitializeCanvas();
+    }
+
+    // Button dropdown toggles
+    document.querySelectorAll('.dropdown').forEach(dropdown => {
+    const button = dropdown.querySelector('.button');
+    const content = dropdown.querySelector('.dropdown-content');
+    button.onclick = function() {
+        hideAllPanels();
+        content.style.display = content.style.display === 'block' ? 'none' : 'block';
+    };
+    });
+
+    document.getElementById("downloadButton").addEventListener("click", function() {
+    performDownload();
+    });
+
+    document.getElementById("copyButton").addEventListener("click", function() {
+    navigator.clipboard.writeText(document.getElementById("modeInput").value).then(() => {
+        showCopyMessage();
+    });
+    });
+
+    document.getElementById("infoButton").addEventListener("click", function() {
+    togglePanel("infoPanel");
+    });
+
+    document.getElementById("historyButton").addEventListener("click", function() {
+    updateHistoryPanel();
+    togglePanel("historyPanel");
+    });
+
+    canvas.addEventListener("click", function() {
+    hideAllPanels();
+    });
+
+    function togglePanel(panelId) {
+    hideAllPanels();
+    const panel = document.getElementById(panelId);
+    if (panel.style.display === "none") {
+        panel.style.display = "block";
+    }
+    }
+
+    function hideAllPanels() {
+    document.getElementById("infoPanel").style.display = "none";
+    document.getElementById("copyMessage").style.display = "none";
+    document.getElementById("historyPanel").style.display = "none";
+    document.querySelectorAll('.dropdown-content').forEach(content => {
+        content.style.display = 'none';
+    });
+    }
+
+    function showCopyMessage() {
+    hideAllPanels();
+    const copyMessage = document.getElementById("copyMessage");
+    copyMessage.style.display = "block";
+    setTimeout(() => {
+        copyMessage.style.display = "none";
+    }, 2000);
+    }
+
+    function updateHistoryPanel() {
+    const historyPanel = document.getElementById("historyPanel");
+    historyPanel.innerHTML = history.map((item, index) => `<div>${index + 1}: ${item}</div>`).join('');
+    }
+
+    async function performDownload() {
+    reinitializeCanvas();
+    const link = document.createElement('a');
+    link.download = 'output.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    }
+
+    // Initialize animation and set event listener once
+    handleInputChange(); // Run initial formula
+    document.getElementById("modeInput").addEventListener("input", handleInputChange);
+    
+  </script>
+</body>
+</html>
