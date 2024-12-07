@@ -20,7 +20,7 @@ Graphing tool for visualizing evolving mathematical functions in 2D space. Input
 
 1. **Input Formulas**:
    - Enter your mathematical formula in the text box (e.g., `x/y+t`).
-   - Supported variables: `x`, `y`, `t`.
+   - Supported variables: `x`, `y`, `t`,`r`,`th`.
    - Supported functions: `sin`, `cos`, `tan`, `sqrt`, `log`, `exp`, `abs`, `floor`,`min`, `max`.
    - Constants: `PI`, `E`.
    - Operators: `+`, `-`, `*`, `/`, `**` (exponentiation).
