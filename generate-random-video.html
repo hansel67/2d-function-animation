@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random Video Generator</title>
+  <style>
+    .progress-container {
+      margin: 20px 0;
+      width: 100%;
+      background-color: #f3f3f3;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .progress-bar {
+      height: 20px;
+      width: 0;
+      background-color: #4caf50;
+      border-radius: 5px;
+    }
+    #status {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Random Video Generator</h1>
+  <button id="generateButton">Generate and Convert Video</button>
+
+  <div id="generationProgress" class="progress-container" style="display:none;">
+    <div class="progress-bar" id="generationBar"></div>
+  </div>
+  <div id="conversionProgress" class="progress-container" style="display:none;">
+    <div class="progress-bar" id="conversionBar"></div>
+  </div>
+
+  <p id="status">Status: Waiting...</p>
+  <a id="webmDownload" style="display:none;">Download WebM</a>
+  <a id="mp4Download" style="display:none;">Download MP4</a>
+
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+  <script>
+    const { createFFmpeg } = FFmpeg;
+
+    const generateRandomWebM = async (onProgress) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 360;
+      canvas.height = 360;
+      const ctx = canvas.getContext('2d');
+      const frames = 30 * 5; // 5 seconds at 30 fps
+      const frameBlobs = [];
+
+      for (let i = 0; i < frames; i++) {
+        // Fill with random grayscale noise
+        const imageData = ctx.createImageData(360, 360);
+        for (let j = 0; j < imageData.data.length; j += 4) {
+          const gray = Math.random() * 255;
+          imageData.data[j] = gray;     // Red
+          imageData.data[j + 1] = gray; // Green
+          imageData.data[j + 2] = gray; // Blue
+          imageData.data[j + 3] = 255;  // Alpha
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        // Convert frame to a Blob
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+        frameBlobs.push(blob);
+
+        // Update generation progress
+        onProgress(((i + 1) / frames) * 100);
+      }
+
+      // Assemble frames into a WebM using FFmpeg
+      const ffmpeg = createFFmpeg({ log: true });
+      await ffmpeg.load();
+
+      for (let i = 0; i < frameBlobs.length; i++) {
+        const fileName = `frame_${String(i).padStart(4, '0')}.jpg`;
+        ffmpeg.FS('writeFile', fileName, new Uint8Array(await frameBlobs[i].arrayBuffer()));
+      }
+
+      // Encode the frames into WebM
+      await ffmpeg.run(
+        '-framerate', '30',
+        '-i', "frame_%04d.jpg",
+        '-c:v', 'libvpx-vp9',
+        '-pix_fmt', 'yuv420p',
+        'output.webm'
+      );
+
+      const webmData = ffmpeg.FS('readFile', 'output.webm');
+      return new Blob([webmData.buffer], { type: 'video/webm' });
+    };
+
+    document.getElementById('generateButton').addEventListener('click', async () => {
+      const status = document.getElementById('status');
+      const generationProgress = document.getElementById('generationProgress');
+      const conversionProgress = document.getElementById('conversionProgress');
+      const generationBar = document.getElementById('generationBar');
+      const conversionBar = document.getElementById('conversionBar');
+      const webmDownload = document.getElementById('webmDownload');
+      const mp4Download = document.getElementById('mp4Download');
+
+      webmDownload.style.display = 'none';
+      mp4Download.style.display = 'none';
+      generationProgress.style.display = 'block';
+      conversionProgress.style.display = 'none';
+      generationBar.style.width = '0%';
+      conversionBar.style.width = '0%';
+
+      status.textContent = "Status: Generating random video...";
+      const webm = await generateRandomWebM((progress) => {
+        generationBar.style.width = `${progress}%`;
+      });
+
+      // Set up WebM download link
+      const webmUrl = URL.createObjectURL(webm);
+      webmDownload.href = webmUrl;
+      webmDownload.download = 'random_video.webm';
+      webmDownload.textContent = "Download WebM";
+      webmDownload.style.display = 'block';
+
+      generationProgress.style.display = 'none';
+      conversionProgress.style.display = 'block';
+
+      status.textContent = "Status: Loading FFmpeg...";
+      const ffmpeg = createFFmpeg({ log: true });
+      await ffmpeg.load();
+
+      status.textContent = "Status: Converting to MP4...";
+      ffmpeg.FS('writeFile', 'input.webm', new Uint8Array(await webm.arrayBuffer()));
+      await ffmpeg.run('-i', 'input.webm', 'output.mp4');
+
+      const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
+      const mp4Blob = new Blob([mp4Data.buffer], { type: 'video/mp4' });
+
+      // Set up MP4 download link
+      const mp4Url = URL.createObjectURL(mp4Blob);
+      mp4Download.href = mp4Url;
+      mp4Download.download = 'random_video.mp4';
+      mp4Download.textContent = "Download MP4";
+      mp4Download.style.display = 'block';
+
+      conversionProgress.style.display = 'none';
+      status.textContent = "Status: Done!";
+    });
+  </script>
+</body>
+</html>
