@@ -126,7 +126,8 @@
          0 < t < 1<br>
          0 < r<br>
          0 < th < 1<br>
-      Functions: sin, cos, tan, sqrt, log, exp, abs, floor, min, max<br>
+      Univariate F'ns: sin, cos, tan, sqrt, log, exp, abs, floor, min, max<br>
+      Bivariate F'ns: chk
       Constants: PI, E<br>
       Operators: +, -, *, /, **<br>
       Example Inputs:<br>
@@ -134,7 +135,7 @@
       5*sqrt(r)+th-t<br>
       log(1/r)+t<br>
       sin(10*x)+sin(10*y)+t<br>
-      floor((x+t)*2)/2+floor(y*2)/2+0.25<br>
+      chk(x,y-t)+r
     </div>
     <div id="copyMessage" class="copy-message">Text copied to clipboard!</div>
     <div id="historyPanel" class="history-panel"></div>
@@ -166,14 +167,14 @@
     window.addEventListener("resize", setCanvasDimensions);
 
     // Function to sanitize input and create transformation function
-    function sanitizeInput(input) {
+function sanitizeInput(input) {
     const allowedFunctions = [
         'sin', 'cos', 'tan', 'sqrt', 'log', 'exp', 'abs', 'floor', 'min', 'max', 'atan2'
     ];
     const allowedConstants = ['PI', 'E'];
 
     // Step 1: Sanitize input to remove all unwanted characters
-    const sanitized = input.replace(/[^a-zA-Z0-9\.\+\-\*\/\(\)\s]/g, '');
+    const sanitized = input.replace(/[^a-zA-Z0-9\.\+\-\*\/\(\),\s]/g, '');
 
     // Step 2: Ensure allowed functions are followed by '('
     const functionPattern = new RegExp(`\\b(${allowedFunctions.join('|')})\\b(?!\\()`, 'g');
@@ -181,26 +182,33 @@
         throw new Error("Invalid syntax: Function without parentheses detected.");
     }
 
-    // Step 3: Replace standalone 'r' with 'sqrt(x**2 + y**2)'
-    const replaceR = sanitized.replace(/\br\b/g, 'sqrt(x**2 + y**2)');
+    // Step 3: Replace the custom macro chk(a, b)
+    const macroPattern = /\bchk\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g;
+    const replaceChk = sanitized.replace(
+        macroPattern,
+        (_, a, b) => `floor((${a})*2)/2 + floor((${b})*2)/2 + 0.25`
+    );
 
-    // Step 4: Replace standalone 'th' with 'atan2(y, x)'
+    // Step 4: Replace standalone 'r' with 'sqrt(x**2 + y**2)'
+    const replaceR = replaceChk.replace(/\br\b/g, 'sqrt(x**2 + y**2)');
+
+    // Step 5: Replace standalone 'th' with 'atan2(y, x)'
     const replaceTh = replaceR.replace(/\bth\b/g, 'atan2(y, x)/PI/2');
 
-    // Step 5: Replace allowed functions with Math equivalents
+    // Step 6: Replace allowed functions with Math equivalents
     const replacedFunctions = replaceTh.replace(
         new RegExp(`\\b(${allowedFunctions.join('|')})\\b`, 'g'),
         'Math.$1'
     );
 
-    // Step 6: Replace allowed constants with Math equivalents
+    // Step 7: Replace allowed constants with Math equivalents
     const replacedConstants = replacedFunctions.replace(
         new RegExp(`\\b(${allowedConstants.join('|')})\\b`, 'g'),
         'Math.$1'
     );
 
     return replacedConstants;
-  }
+}
 
     // Compile the formula and handle errors
     function handleInputChange() {
